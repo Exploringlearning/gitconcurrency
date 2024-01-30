@@ -4,7 +4,7 @@ type Page struct {
 	Page      int `json:"page"`
 	PerPage   int `json:"per_page"`
 	Total     int `json:"total"`
-	Totalpage int `json:"totalpage"`
+	TotalPages int `json:"total_pages"`
 	Users      []User `json:"data"`
 }
 
