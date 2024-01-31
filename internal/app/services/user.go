@@ -22,7 +22,7 @@ func NewUser() User {
 }
 
 func (u *user) Get() ([]dto.User, error) {
-	ch := make(chan dto.Page)
+	ch := make(chan dto.Page, 2)
 	var wg sync.WaitGroup
 	var users []dto.User
 
@@ -39,19 +39,10 @@ func (u *user) Get() ([]dto.User, error) {
 	}
 	log.Println("Started waiting")
 	wg.Wait()
+	close(ch)
 
-	wg.Add(1)
-	go func() {
-		log.Println("before channel closing")
-		close(ch)
-		log.Println("channel is closed")
-	}()
-	wg.Done()
-	wg.Wait()
 
-	wg.Add(1)
-	go getUsersList(ch, &wg, &users)
-	wg.Wait()
+	getUsersList(ch, &wg, &users)
 
 	log.Println("Final list:", users)
 	return users, nil
@@ -82,15 +73,12 @@ func getPage(pageNo int) dto.Page {
 }
 
 func getUsersList(ch chan dto.Page, wg *sync.WaitGroup, users *[]dto.User) {
-	defer func() {
-		log.Println("Get users list completed!")
-		wg.Done()
-	}()
+
 	for page := range ch {
 		*users = append(*users, page.Users...)
 		log.Println("Appending users completed", users)
 	}
-	//wg.Done()
+
 }
 
 func serializeJsonToPageDto(body []byte, page *dto.Page) {
