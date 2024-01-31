@@ -27,22 +27,15 @@ func (u *user) Get() ([]dto.User, error) {
 	var users []dto.User
 
 	firstPage := getPage(1)
-
-	log.Println("Total pages:", firstPage.TotalPages)
-	//wg.Add(firstPage.TotalPages + 1)
+	go getUsersList(ch, &wg, &users)
 
 	for i := 1; i <= firstPage.TotalPages; i++ {
 		wg.Add(1)
 		pageNo := i
 		go sendPageToChannel(ch, &wg, pageNo)
-		log.Printf("Sent %d page to channel", pageNo)
 	}
-	log.Println("Started waiting")
 	wg.Wait()
 	close(ch)
-
-
-	getUsersList(ch, &wg, &users)
 
 	log.Println("Final list:", users)
 	return users, nil
@@ -57,7 +50,6 @@ func sendPageToChannel(ch chan<- dto.Page, wg *sync.WaitGroup, pageNo int) {
 	page := getPage(pageNo)
 	log.Println("Page -> ", page)
 	ch <- page
-	//wg.Done()
 
 }
 
@@ -76,7 +68,6 @@ func getUsersList(ch chan dto.Page, wg *sync.WaitGroup, users *[]dto.User) {
 
 	for page := range ch {
 		*users = append(*users, page.Users...)
-		log.Println("Appending users completed", users)
 	}
 
 }
