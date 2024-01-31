@@ -26,32 +26,28 @@ func (u *user) Get() ([]dto.User, error) {
 	var wg sync.WaitGroup
 	var users []dto.User
 
-	//pageNo := 1
-	//wg.Add(1)
-	//go sendPageToChannel(ch, &wg, pageNo)
-	//log.Println("Sent First page to channel")
-
 	firstPage := getPage(1)
 
 	log.Println("Total pages:", firstPage.TotalPages)
-	wg.Add(firstPage.TotalPages)
+	//wg.Add(firstPage.TotalPages + 1)
 
 	for i := 1; i <= firstPage.TotalPages; i++ {
-		go sendPageToChannel(ch, &wg, i)
-		log.Printf("Sent %d page to channel", i)
+		wg.Add(1)
+		pageNo := i
+		go sendPageToChannel(ch, &wg, pageNo)
+		log.Printf("Sent %d page to channel", pageNo)
 	}
-
+	log.Println("Started waiting")
 	wg.Wait()
-	close(ch)
 
-	//wg.Add(2)
-	//go func() {
-	//	//wg.Wait()
-	//	log.Println("Wait Group")
-	//	close(ch)
-	//	log.Println("channel is closed")
-	//}()
-	//wg.Done()
+	wg.Add(1)
+	go func() {
+		log.Println("before channel closing")
+		close(ch)
+		log.Println("channel is closed")
+	}()
+	wg.Done()
+	wg.Wait()
 
 	wg.Add(1)
 	go getUsersList(ch, &wg, &users)
@@ -63,13 +59,14 @@ func (u *user) Get() ([]dto.User, error) {
 
 func sendPageToChannel(ch chan<- dto.Page, wg *sync.WaitGroup, pageNo int) {
 	defer func() {
-		log.Println("Fetch users completed!")
+		log.Println("Fetch page completed!")
 		wg.Done()
 	}()
 
 	page := getPage(pageNo)
 	log.Println("Page -> ", page)
 	ch <- page
+	//wg.Done()
 
 }
 
@@ -85,16 +82,15 @@ func getPage(pageNo int) dto.Page {
 }
 
 func getUsersList(ch chan dto.Page, wg *sync.WaitGroup, users *[]dto.User) {
-	//defer wg.Done()
 	defer func() {
 		log.Println("Get users list completed!")
 		wg.Done()
 	}()
 	for page := range ch {
-		log.Println("Appending users")
 		*users = append(*users, page.Users...)
 		log.Println("Appending users completed", users)
 	}
+	//wg.Done()
 }
 
 func serializeJsonToPageDto(body []byte, page *dto.Page) {
