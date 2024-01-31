@@ -2,14 +2,12 @@ package services
 
 import (
 	"encoding/json"
-	"time"
-
-	"sync"
-	//"fmt"
+	"fmt"
 	"ginconcurrency/internal/app/dto"
 	"io"
 	"log"
 	"net/http"
+	"sync"
 )
 
 type User interface {
@@ -26,43 +24,102 @@ func NewUser() User {
 func (u *user) Get() ([]dto.User, error) {
 	ch := make(chan dto.Page)
 	var wg sync.WaitGroup
-	var page dto.Page
-	resp, err := http.Get("https://reqres.in/api/users?page=1")
+	var users []dto.User
+
+	//pageNo := 1
+	//wg.Add(1)
+	//go sendPageToChannel(ch, &wg, pageNo)
+	//log.Println("Sent First page to channel")
+
+	firstPage := getPage(1)
+
+	log.Println("Total pages:", firstPage.TotalPages)
+	wg.Add(firstPage.TotalPages)
+
+	for i := 1; i <= firstPage.TotalPages; i++ {
+		go sendPageToChannel(ch, &wg, i)
+		log.Printf("Sent %d page to channel", i)
+	}
+
+	wg.Wait()
+	close(ch)
+
+	//wg.Add(2)
+	//go func() {
+	//	//wg.Wait()
+	//	log.Println("Wait Group")
+	//	close(ch)
+	//	log.Println("channel is closed")
+	//}()
+	//wg.Done()
+
+	wg.Add(1)
+	go getUsersList(ch, &wg, &users)
+	wg.Wait()
+
+	log.Println("Final list:", users)
+	return users, nil
+}
+
+func sendPageToChannel(ch chan<- dto.Page, wg *sync.WaitGroup, pageNo int) {
+	defer func() {
+		log.Println("Fetch users completed!")
+		wg.Done()
+	}()
+
+	page := getPage(pageNo)
+	log.Println("Page -> ", page)
+	ch <- page
+
+}
+
+func getPage(pageNo int) dto.Page {
+	resp, err := http.Get(fmt.Sprintf("https://reqres.in/api/users?page=%d", pageNo))
 	if err != nil {
 		log.Print("Not able to get the HTTP response ", err)
 	}
+	var page dto.Page
+	body := getResponseBody(resp, err)
+	serializeJsonToPageDto(body, &page)
+	return page
+}
 
+func getUsersList(ch chan dto.Page, wg *sync.WaitGroup, users *[]dto.User) {
+	//defer wg.Done()
+	defer func() {
+		log.Println("Get users list completed!")
+		wg.Done()
+	}()
+	for page := range ch {
+		log.Println("Appending users")
+		*users = append(*users, page.Users...)
+		log.Println("Appending users completed", users)
+	}
+}
+
+func serializeJsonToPageDto(body []byte, page *dto.Page) {
+	if err := json.Unmarshal(body, &page); err != nil {
+		log.Fatalln(err)
+	}
+}
+
+func getResponseBody(resp *http.Response, err error) []byte {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Fatalln(err)
 	}
+
 	defer resp.Body.Close()
-	error := json.Unmarshal(body, &page)
-	if error != nil {
-		log.Fatalln(error)
-	}
 
-	// log.Print( "Before go routines: ", page)
-	time.Sleep(time.Second * 5)
-	wg.Add(1)
-	go readPages(page, ch)
-	go func() {
-		wg.Wait()
-		log.Print("before closing the channel: ", page)
-		close(ch)
-	}()
-	//go writePages(ch)
-	log.Print(page.Users)
-	return page.Users, error
+	return body
 }
 
-func readPages(page dto.Page, ch chan<- dto.Page) {
-
-	log.Print(" Inside read pages")
-	ch <- page
-	time.Sleep(time.Second * 2)
-	log.Print("after read channels: ")
-}
+//func readPages(page dto.Page, ch chan<- dto.Page) {
+//	log.Print(" Inside read pages")
+//	ch <- page
+//	time.Sleep(time.Second * 2)
+//	log.Print("after read channels: ")
+//}
 
 // func writePages(out <-chan dto.Page) (pages []dto.Page) {
 // 	log.Print("writePages ", len(out))
